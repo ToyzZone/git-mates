@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Same branch or virtual branches</title>
+<style>
+  :root { --ink:#1f2328; --muted:#656d76; --line:#d8dee4; --bg:#f6f8fa; --card:#fff; --accent:#4f46e5;
+          --s1:#2563eb; --s1-bg:#dbeafe; --s2:#c2410c; --s2-bg:#ffedd5; --bad:#b42318; --good:#1a7f37; --warn:#9a6700; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: var(--ink); background: var(--bg); }
+  header { padding: 24px 32px 0; max-width: 1560px; margin: auto; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  .intro { color: var(--muted); max-width: 980px; margin: 0 0 4px; }
+  main { display: grid; grid-template-columns: 350px 1fr; gap: 24px; padding: 16px 32px 48px; max-width: 1560px; margin: auto; align-items: start; }
+  aside { position: sticky; top: 16px; display: grid; gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  h3 { margin: 0 0 2px; font-size: 17px; }
+  h4 { margin: 16px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+  p { margin: 0 0 8px; }
+  button { font: inherit; font-size: 14px; border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 6px 10px; cursor: pointer; text-align: left; color: var(--ink); }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.next { border: 2px solid var(--accent); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .tabs { display: grid; gap: 6px; margin-bottom: 12px; }
+  .tabs button { font-size: 13px; padding: 4px 9px; }
+  .steps { display: grid; gap: 6px; margin-top: 10px; }
+  .event { padding: 10px 14px; border-radius: 8px; background: #eef2ff; border: 1px solid #c7d2fe; margin-bottom: 16px; }
+  .event.blocked { background: #fef3f2; border-color: #fecdca; color: var(--bad); }
+  .models { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+  pre, code, .mono { font: 12.5px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; }
+  code { background: var(--bg); padding: 1px 4px; border-radius: 4px; }
+  pre { margin: 0; background: var(--bg); border-radius: 7px; padding: 10px 12px; overflow-x: auto; white-space: pre; }
+  .files { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; }
+  .file-name { font: 600 12.5px ui-monospace, Menlo, monospace; margin-bottom: 4px; }
+  table.wd { border-collapse: collapse; width: 100%; font: 12.5px/1.6 ui-monospace, Menlo, monospace; }
+  table.wd td { padding: 1px 8px; white-space: pre; }
+  table.wd tr { cursor: pointer; }
+  table.wd tr:hover td { outline: 1px solid #c7d2fe; }
+  td.ln { color: var(--muted); text-align: right; width: 1%; }
+  td.tag { width: 1%; text-align: right; }
+  tr.w-s1 td { background: var(--s1-bg); }
+  tr.w-s2 td { background: var(--s2-bg); }
+  .pill { font: 600 11px/1 -apple-system, sans-serif; padding: 3px 7px; border-radius: 99px; white-space: nowrap; }
+  .pill.s1 { background: var(--s1); color: #fff; }
+  .pill.s2 { background: var(--s2); color: #fff; }
+  .pill.c { background: none; border: 1px solid; }
+  .pill.c.s1 { color: var(--s1); } .pill.c.s2 { color: var(--s2); }
+  .s1t { color: var(--s1); } .s2t { color: var(--s2); }
+  .ref { color: var(--accent); }
+  .pr { border-left: 3px solid var(--line); padding: 2px 0 2px 10px; margin: 8px 0; }
+  .good { color: var(--good); } .bad { color: var(--bad); } .warn { color: var(--warn); } .muted { color: var(--muted); }
+  ul.watch { margin: 0; padding-left: 18px; } ul.watch li { margin: 5px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Same branch or virtual branches?</h1>
+  <p class="intro">Two Claude Code sessions edit one shared working directory. When a session commits, where should its commit go?
+    <b>A:</b> onto the one branch you're on, with a <code>Session-Id</code> trailer recording who made it.
+    <b>B:</b> onto a virtual branch of its own, as in GitButler, with HEAD sitting on a merge of all the branches.
+    The same edits and commits are replayed both ways, side by side. Watch the <code>git log</code>, whether one session's work makes a clean PR, and what happens when both sessions touch the same file.</p>
+  <p class="intro" style="font-size:13px">Throwaway prototype for the ticket "Same branch or virtual branches". The conflict rule was checked against real git: changes on the same line or on neighbouring lines conflict (in both merge and cherry-pick), and one untouched line between them is enough to merge cleanly.</p>
+</header>
+<main>
+  <aside id="aside"></aside>
+  <section>
+    <div id="event" class="event"></div>
+    <div class="card"><h2>Shared working directory (what both sessions see on disk)</h2><div id="wd" class="files"></div></div>
+    <div class="models"><div class="card" id="a"></div><div class="card" id="b"></div></div>
+  </section>
+</main>
+
+<script>
+// ===== Pure model: no DOM. The same commits, arranged two ways. =====
+const SIDS = ['s1', 's2'];
+const NAMES = { s1: 'Session 1', s2: 'Session 2' };
+// Verified with real git: same or adjacent lines conflict; one untouched line between is clean.
+const NEAR = 1;
+
+function initState(base) {
+  const files = {};
+  for (const [path, lines] of Object.entries(base)) files[path] = lines.map(text => ({ text, committed: text, wip: null }));
+  return { base, files, commits: [], edits: { s1: 0, s2: 0 }, event: 'Clean start: both sessions share one working directory, on main.', blocked: false };
+}
+
+function editLine(s, sid, path, i, text) {
+  const line = s.files[path][i];
+  if (line.wip && line.wip !== sid)
+    return { ...s, blocked: true, event: `Blocked: ${NAMES[sid]} tried to edit ${path}:${i + 1}, but ${NAMES[line.wip]} has uncommitted work on that line. (Decided while charting: block a Clobbered edit and name the owner.)` };
+  const n = s.edits[sid] + 1;
+  const next = text ?? `${s.base[path][i]} // ${NAMES[sid]} edit ${n}`;
+  const lines = s.files[path].map((l, j) => j === i ? { ...l, text: next, wip: next === l.committed ? null : sid } : l);
+  return { ...s, files: { ...s.files, [path]: lines }, edits: { ...s.edits, [sid]: n }, blocked: false, event: `${NAMES[sid]} edited ${path}:${i + 1}.` };
+}
+
+function commitWip(s, sid, msg) {
+  const changes = [], files = {};
+  for (const [path, lines] of Object.entries(s.files))
+    files[path] = lines.map((l, i) => {
+      if (l.wip !== sid) return l;
+      changes.push({ path, i, before: l.committed, after: l.text });
+      return { ...l, committed: l.text, wip: null };
+    });
+  if (!changes.length) return { ...s, blocked: true, event: `${NAMES[sid]} has no WIP to commit.` };
+  const commit = { n: s.commits.length + 1, sid, msg: msg ?? `${NAMES[sid]} change`, changes };
+  const othersWip = Object.values(files).flat().some(l => l.wip);
+  return { ...s, files, commits: [...s.commits, commit], blocked: false,
+    event: `${NAMES[sid]} committed "${commit.msg}" (${changes.length} line${changes.length > 1 ? 's' : ''}).${othersWip ? " Only its own lines went in; the other session's WIP stays on disk, uncommitted." : ''}` };
+}
+
+const near = (a, b) => a.path === b.path && Math.abs(a.i - b.i) <= NEAR;
+const clashes = (c, d) => c.changes.flatMap(x => d.changes.filter(y => near(x, y)).map(y => ({ mine: x, theirs: y })));
+
+// A: commits go on the current branch in the order they were made.
+// A one-session PR = cherry-pick that session's commits onto origin/main. That conflicts wherever a
+// picked commit touches lines near an EARLIER commit of the other session, which the PR leaves out.
+function sharedBranch(s) {
+  const prs = {};
+  for (const sid of SIDS) {
+    const mine = s.commits.filter(c => c.sid === sid);
+    const hits = [], needs = [];
+    for (const c of mine) for (const o of s.commits) {
+      if (o.sid === sid || o.n > c.n) continue;
+      const h = clashes(c, o);
+      if (!h.length) continue;
+      hits.push(...h.map(x => ({ commit: c, other: o, ...x })));
+      if (!needs.includes(o)) needs.push(o);
+    }
+    // Circular: the other session's commits this PR needs were themselves built on this session's earlier ones.
+    const circular = needs.some(o => mine.some(c => c.n < o.n && clashes(o, c).length));
+    prs[sid] = { commits: mine, hits, needs, circular };
+  }
+  return { prs, bothOnBranch: new Set(s.commits.map(c => c.sid)).size > 1 };
+}
+
+// B: each session's commits go on vb/<session>, branched from main. HEAD sits on a workspace merge of them.
+// Two branches conflict wherever their changes are on the same or adjacent lines.
+function virtualBranches(s) {
+  const branches = Object.fromEntries(SIDS.map(sid => [sid, s.commits.filter(c => c.sid === sid)]));
+  const hits = [];
+  for (const c of branches.s1) for (const d of branches.s2) {
+    // one note per pair of clashing commits; a same-line clash says more than a neighbouring one
+    const x = clashes(c, d).sort((p, q) => (p.mine.i !== p.theirs.i) - (q.mine.i !== q.theirs.i))[0];
+    if (!x) continue;
+    const [earlier, later] = c.n < d.n ? [c, d] : [d, c];
+    hits.push({ s1: x.mine, s2: x.theirs, earlier, later, sameLine: x.mine.i === x.theirs.i });
+  }
+  const committedFiles = [...new Set(s.commits.flatMap(c => c.changes.map(x => x.path)))];
+  return { branches, hits, committedFiles };
+}
+
+function wipByFile(s) {
+  return Object.entries(s.files).map(([path, lines]) => {
+    const by = {};
+    lines.forEach((l, i) => { if (l.wip) (by[l.wip] ??= []).push(i + 1); });
+    return { path, by };
+  }).filter(f => Object.keys(f.by).length);
+}
+
+function shaOf(tag, n) {
+  let h = 2166136261;
+  for (const ch of `${tag}${n}`) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619); }
+  return (h >>> 0).toString(16).padStart(8, '0').slice(0, 7);
+}
+
+// ===== Page: a thin shell over the model above =====
+const BASE = {
+  'src/cart.rs': [
+    'use crate::item::Item;', '',
+    'pub fn total(items: &[Item]) -> u32 {',
+    '    let mut sum = 0;',
+    '    for i in 0..items.len() - 1 {',
+    '        sum += items[i].price;',
+    '    }', '    sum', '}', '',
+    'pub fn checkout(cart: &Cart) {',
+    '    charge(total(&cart.items));',
+    '}'],
+  'src/discounts.rs': [
+    '// Discount codes (not implemented yet)',
+    'pub fn discount(_code: &str) -> u32 {',
+    '    0', '}'],
+};
+const CART = 'src/cart.rs', DISC = 'src/discounts.rs';
+const FIX = '    for i in 0..items.len() {';
+const E = (sid, path, line, text, label) => ({ type: 'edit', sid, path, line, text, label });
+const C = (sid, msg, label) => ({ type: 'commit', sid, msg, label: label ?? `${NAMES[sid]} commits: "${msg}"` });
+
+const SCENARIOS = [
+  { title: "The user's scenario",
+    what: 'Session 1 is midway through a big feature (discount codes). Session 2 opens to fix a bug in <code>total()</code> and commits. Session 1 finishes later and commits. They touch different parts of cart.rs.',
+    watch: "the shape of each git log, and whether each session's work comes out as a clean PR. Here both models look fine.",
+    steps: [
+      E('s1', DISC, 3, '    if code == "SUMMER10" { 10 } else { 0 }', 'Session 1 starts the discount feature (discounts.rs line 3)'),
+      E('s1', CART, 12, '    charge(total(&cart.items) * (100 - discount(&cart.code)) / 100);', 'Session 1 wires discounts into checkout (cart.rs line 12)'),
+      E('s2', CART, 5, FIX, 'Session 2 fixes the off-by-one in total() (cart.rs line 5)'),
+      C('s2', 'fix: total() skipped the last item'),
+      E('s1', DISC, 2, 'pub fn discount(code: &str) -> u32 {', 'Session 1 finishes the feature (discounts.rs line 2)'),
+      C('s1', 'feat: discount codes at checkout'),
+    ] },
+  { title: 'Fix right next to the feature',
+    what: "Same story, but Session 2's fix (cart.rs line 5) is on the line just above Session 1's WIP (line 6). Nobody edits the same line, so nothing is blocked.",
+    watch: "the shared branch stays one straight line, and both PRs work if Session 2's merges first. The virtual branches conflict, because git treats neighbouring lines as a conflict.",
+    steps: [
+      E('s1', CART, 6, '        sum += items[i].price * (100 - items[i].discount) / 100;', 'Session 1 starts per-item discounts (cart.rs line 6)'),
+      E('s2', CART, 5, FIX, 'Session 2 fixes the off-by-one on the line above (cart.rs line 5)'),
+      C('s2', 'fix: total() skipped the last item'),
+      C('s1', 'feat: per-item discounts'),
+    ] },
+  { title: 'Checkpoint, then ship the fix fast',
+    what: 'Session 1 commits a half-done checkpoint of its feature. Then Session 2 fixes the bug and wants it in production today.',
+    watch: "on the shared branch, the half-done checkpoint sits under the fix, so a plain git push would publish it too, and the fix needs a cherry-pick onto a fresh branch. With virtual branches, Session 2 just pushes its own branch.",
+    steps: [
+      E('s1', DISC, 3, '    todo!("discount lookup")', 'Session 1 stubs out the feature (discounts.rs line 3)'),
+      C('s1', 'wip: discount skeleton', 'Session 1 commits a half-done checkpoint'),
+      E('s2', CART, 5, FIX, 'Session 2 fixes the off-by-one (cart.rs line 5)'),
+      C('s2', 'fix: total() skipped the last item'),
+    ] },
+  { title: 'Session 1 builds on the fix',
+    what: "Session 2 fixes the loop in <code>total()</code> and commits. Session 1 then rewrites that same loop for its feature. This is allowed: Session 2's change is committed, so it's no longer anyone's WIP.",
+    watch: "on the shared branch, Session 1's PR needs Session 2's to merge first, and then applies cleanly. With virtual branches, Session 1's change can't live on its own branch: it has to be stacked on Session 2's branch, or become a Mixed commit.",
+    steps: [
+      E('s2', CART, 5, FIX, 'Session 2 fixes the off-by-one (cart.rs line 5)'),
+      C('s2', 'fix: total() skipped the last item'),
+      E('s1', CART, 5, '    for item in items.iter().filter(|it| !it.free) {', 'Session 1 rewrites the loop Session 2 just fixed (cart.rs line 5)'),
+      E('s1', CART, 6, '        sum += item.price;', 'Session 1 updates the loop body (cart.rs line 6)'),
+      C('s1', 'feat: free items cost nothing'),
+    ] },
+  { title: 'Same line, both sessions',
+    what: 'Session 1 has WIP on the checkout line. Session 2 tries to edit the same line.',
+    watch: "it's blocked in both models before the branch question even comes up (decided while charting).",
+    steps: [
+      E('s1', CART, 12, '    charge(total(&cart.items) * (100 - discount(&cart.code)) / 100);', 'Session 1 edits the checkout line (cart.rs line 12)'),
+      E('s2', CART, 12, '    charge_with_retry(total(&cart.items));', 'Session 2 tries to edit the same line'),
+    ] },
+];
+
+let state = initState(BASE), active = 's1', tab = 0, step = 0;
+
+const esc = t => String(t).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const who = sid => `<b class="${sid}t">${NAMES[sid]}</b>`;
+const other = sid => sid === 's1' ? 's2' : 's1';
+const loc = x => `${x.path.replace('src/', '')}:${x.i + 1}`;
+const shaA = c => shaOf('A', c.n), shaB = c => shaOf('B', c.n);
+const BASE_SHA = shaOf('base', 0);
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+function apply(action) {
+  state = action.type === 'edit' ? editLine(state, action.sid, action.path, action.line - 1, action.text) : commitWip(state, action.sid, action.msg);
+}
+
+function renderAside() {
+  const sc = SCENARIOS[tab];
+  return `
+  <div class="card"><h2>Guided walkthroughs</h2>
+    <div class="tabs">${SCENARIOS.map((x, k) => `<button data-tab="${k}" class="${k === tab ? 'on' : ''}">${k + 1}. ${x.title}</button>`).join('')}</div>
+    <p>${sc.what}</p>
+    <p class="muted"><b>Watch:</b> ${sc.watch}</p>
+    <div class="steps">${sc.steps.map((st, k) =>
+      `<button data-step="${k}" class="${k === step ? 'next' : ''}" ${k !== step ? 'disabled' : ''}>${k < step ? '✓' : `${k + 1}.`} ${st.label}</button>`).join('')}</div>
+    <div class="row" style="margin-top:10px"><button data-tab="${tab}">Start this walkthrough over</button></div>
+  </div>
+  <div class="card"><h2>Free play</h2>
+    <p class="muted">Pick who is typing, then click any line in the working directory to edit it.</p>
+    <div class="row">${SIDS.map(sid => `<button data-active="${sid}" class="${sid === active ? 'on' : ''}">${NAMES[sid]} is typing</button>`).join('')}</div>
+    <div class="row" style="margin-top:8px">${SIDS.map(sid => `<button data-commit="${sid}">${NAMES[sid]} commits</button>`).join('')}</div>
+    <div class="row" style="margin-top:8px"><button data-reset>Reset to a clean start</button></div>
+  </div>`;
+}
+
+function renderWD() {
+  return Object.entries(state.files).map(([path, lines]) => `
+    <div><div class="file-name">${path}</div><table class="wd">${lines.map((l, i) => {
+      const last = [...state.commits].reverse().find(c => c.changes.some(x => x.path === path && x.i === i));
+      const tag = l.wip ? `<span class="pill ${l.wip}">WIP · ${NAMES[l.wip]}</span>`
+        : last ? `<span class="pill c ${last.sid}">committed · ${NAMES[last.sid]}</span>` : '';
+      return `<tr class="${l.wip ? 'w-' + l.wip : ''}" data-path="${path}" data-i="${i}"><td class="ln">${i + 1}</td><td>${esc(l.text) || ' '}</td><td class="tag">${tag}</td></tr>`;
+    }).join('')}</table></div>`).join('');
+}
+
+function statusLines(branch) {
+  const files = wipByFile(state);
+  if (!files.length) return `On branch ${branch}\nnothing to commit, working tree clean`;
+  return `On branch ${branch}\n` + files.map(f =>
+    ` M ${f.path}    <span class="muted">${Object.entries(f.by).map(([sid, ls]) => `<span class="${sid}t">${NAMES[sid]}: line ${ls.join(', ')}</span>`).join(' · ')}</span>`).join('\n');
+}
+
+function renderA() {
+  const A = sharedBranch(state);
+  const log = [...state.commits].reverse().map((c, k) =>
+    `* <b>${shaA(c)}</b> ${k === 0 ? '<span class="ref">(HEAD -> main)</span> ' : ''}${esc(c.msg)}   <span class="${c.sid}t">Session-Id: ${c.sid}</span>`);
+  log.push(`* <b>${BASE_SHA}</b> <span class="ref">(${state.commits.length ? '' : 'HEAD -> main, '}origin/main)</span> Initial commit`);
+  const greps = SIDS.filter(sid => A.prs[sid].commits.length).map(sid =>
+    `<div class="mono"><code>git log --grep='Session-Id: ${sid}'</code> → <span class="${sid}t">${A.prs[sid].commits.map(shaA).reverse().join(' ')}</span></div>`).join('');
+
+  const prs = SIDS.map(sid => {
+    const p = A.prs[sid], o = other(sid);
+    if (!p.commits.length) return `<div class="pr">${who(sid)}: <span class="muted">nothing committed yet.</span></div>`;
+    let out = `<div class="pr">${who(sid)}: <code>git switch -c ${sid}-pr origin/main</code> then <code>git cherry-pick ${p.commits.map(shaA).join(' ')}</code><br>`;
+    if (!p.hits.length) return out + `<span class="good">✓ Clean: ${plural(p.commits.length, 'commit')}, nothing from ${NAMES[o]}.</span></div>`;
+    const h = p.hits[0];
+    out += `<span class="bad">✗ Conflicts on its own: ${shaA(h.commit)} ${h.mine.i === h.theirs.i ? `rewrites ${loc(h.mine)}, which` : `changes ${loc(h.mine)}, right next to ${loc(h.theirs)}, which`} ${NAMES[o]}'s ${shaA(h.other)} changed. This PR leaves that commit out.</span><br>`;
+    out += p.circular
+      ? `<span class="bad">✗ And that commit was itself built on ${NAMES[sid]}'s earlier work, so the two sessions' work can't be split into two PRs.</span>`
+      : `<span class="good">✓ Clean once ${NAMES[o]}'s ${p.needs.map(shaA).join(', ')} merges first (stack the PRs). It was committed on top of that change, so nobody has to fix a conflict by hand.</span>`;
+    return out + '</div>';
+  }).join('');
+
+  const watch = [];
+  if (A.bothOnBranch) {
+    const counts = SIDS.map(sid => `${A.prs[sid].commits.length} from ${NAMES[sid]}`).join(', ');
+    watch.push(`<code>git push</code> from either session publishes every commit on <code>main</code> (${counts}), finished or not.`);
+  }
+  for (const sid of SIDS) if (A.prs[sid].hits.length)
+    watch.push(`${who(sid)}'s work can't be a standalone PR right now; see above.`);
+  if (!watch.length) watch.push('<span class="good">Nothing yet. History is one straight line, in the order things were committed.</span>');
+
+  return `<h3>A · One shared branch</h3>
+    <p class="muted">Every session commits onto <code>main</code>, the branch you're on. A <code>Session-Id</code> trailer records who made each commit.</p>
+    <h4>git log --graph --oneline</h4><pre>${log.join('\n')}</pre>${greps}
+    <h4>git status</h4><pre>${statusLines('main')}</pre>
+    <h4>A PR with only one session's work</h4>${prs}
+    <h4>Watch out</h4><ul class="watch">${watch.map(w => `<li>${w}</li>`).join('')}</ul>`;
+}
+
+function renderB() {
+  const B = virtualBranches(state);
+  const { s1, s2 } = B.branches;
+  const conflicted = B.hits.length > 0;
+  const ws = `<b>${shaOf('ws', state.commits.length)}</b>`;
+  const branchRows = (sid, prefix) => [...B.branches[sid]].reverse().map((c, k) =>
+    `${prefix}<b>${shaB(c)}</b> ${k === 0 ? `<span class="ref">(vb/${sid})</span> ` : ''}<span class="${sid}t">${esc(c.msg)}</span>`);
+  let log;
+  if (s1.length && s2.length) {
+    log = [conflicted
+      ? `<span class="bad">✗   (HEAD -> workspace) can't be a plain merge: vb/s1 and vb/s2 conflict</span>`
+      : `*   ${ws} <span class="ref">(HEAD -> workspace)</span> Workspace: merge vb/s1 + vb/s2`,
+      '|\\', ...branchRows('s2', '| * '), ...branchRows('s1', '* | '), '|/',
+      `* <b>${BASE_SHA}</b> <span class="ref">(main, origin/main)</span> Initial commit`];
+  } else if (s1.length || s2.length) {
+    const sid = s1.length ? 's1' : 's2';
+    log = [`* ${ws} <span class="ref">(HEAD -> workspace)</span> Workspace commit`, ...branchRows(sid, '* '),
+      `* <b>${BASE_SHA}</b> <span class="ref">(main, origin/main, vb/${other(sid)})</span> Initial commit`];
+  } else {
+    log = [`* <b>${BASE_SHA}</b> <span class="ref">(HEAD -> workspace, main, origin/main, vb/s1, vb/s2)</span> Initial commit`];
+  }
+
+  const prs = SIDS.map(sid => {
+    const list = B.branches[sid];
+    if (!list.length) return `<div class="pr">${who(sid)}: <span class="muted">nothing committed yet.</span></div>`;
+    let out = `<div class="pr">${who(sid)}: <code>git push origin vb/${sid}</code><br><span class="good">✓ ${plural(list.length, 'commit')}, already based on origin/main, nothing from ${NAMES[other(sid)]}.</span>`;
+    if (conflicted) out += `<br><span class="warn">⚠ But vb/s1 and vb/s2 conflict, so whichever PR merges second needs the conflict fixed by hand.</span>`;
+    return out + '</div>';
+  }).join('');
+
+  const watch = [];
+  if (state.commits.length) {
+    watch.push(`HEAD sits on <code>workspace</code>, a commit the tool makes, not a branch you chose. A <code>git commit</code> you type by hand lands on top of it.`);
+    watch.push(`HEAD can't simply stay on <code>main</code>: plain <code>git status</code> would then show already-committed work (${B.committedFiles.join(', ')}) as modified.`);
+  }
+  for (const h of B.hits) {
+    const late = h.later.sid, early = h.earlier.sid;
+    watch.push(h.sameLine
+      ? `<span class="bad">${who(late)}'s ${shaB(h.later)} rewrites ${loc(h.s1)}, which ${NAMES[early]} committed on vb/${early}. vb/${late} starts from main, where that line still has the old text, so the change can't stand alone: stack vb/${late} on vb/${early}, or put it on vb/${early} (a Mixed commit).</span>`
+      : `<span class="bad">vb/s1 changes ${loc(h.s1)} and vb/s2 changes ${loc(h.s2)}. Git treats neighbouring lines as a conflict, so the workspace can't be a plain merge of the two branches, even though the working directory holds both changes fine.</span>`);
+  }
+  if (!state.commits.length) watch.push('<span class="good">Nothing yet.</span>');
+
+  return `<h3>B · A virtual branch per session</h3>
+    <p class="muted">Each session commits onto its own branch (<code>vb/s1</code>, <code>vb/s2</code>), branched from main. HEAD sits on a workspace commit that merges them all.</p>
+    <h4>git log --graph --oneline</h4><pre>${log.join('\n')}</pre>
+    <h4>git status</h4><pre>${conflicted ? '<span class="bad">No clean workspace commit to compare against: git can\'t merge vb/s1 and vb/s2.</span>' : statusLines('workspace')}</pre>
+    <h4>A PR with only one session's work</h4>${prs}
+    <h4>Watch out</h4><ul class="watch">${watch.map(w => `<li>${w}</li>`).join('')}</ul>`;
+}
+
+function render() {
+  document.getElementById('aside').innerHTML = renderAside();
+  const ev = document.getElementById('event');
+  ev.textContent = state.event;
+  ev.className = 'event' + (state.blocked ? ' blocked' : '');
+  document.getElementById('wd').innerHTML = renderWD();
+  document.getElementById('a').innerHTML = renderA();
+  document.getElementById('b').innerHTML = renderB();
+}
+
+document.addEventListener('click', e => {
+  const el = e.target.closest('button, tr[data-path]');
+  if (!el) return;
+  const d = el.dataset;
+  if (d.tab !== undefined) { tab = +d.tab; step = 0; state = initState(BASE); }
+  else if (d.step !== undefined) { apply(SCENARIOS[tab].steps[step]); step++; }
+  else if (d.active) active = d.active;
+  else if (d.commit) state = commitWip(state, d.commit);
+  else if (d.reset !== undefined) { state = initState(BASE); step = 0; }
+  else if (d.path) state = editLine(state, active, d.path, +d.i);
+  render();
+});
+
+render();
+</script>
+</body>
+</html>
