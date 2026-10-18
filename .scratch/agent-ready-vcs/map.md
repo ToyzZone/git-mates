@@ -11,7 +11,8 @@ A v0 spec, ready to start coding, for an open-source Rust layer on plain git. Th
 - **Domain:** a concurrency layer on top of plain git. Use the terms in [GLOSSARY.md](../../GLOSSARY.md) (Session, Human session, Ownership, WIP, Base branch, Session branch, Workspace branch, Workspace commit, Mixed commit, Lost WIP, Clobbered edit, Cross-session breakage) and keep it updated.
 - **Pitch** (README headline, agreed): *"Run many Claude Code sessions in one folder. Each one commits only its own changes, and none can wipe another's WIP."* Tagline: *"Per-session git for shared working directories."* Plain git (same repo, same GitHub), no new CLI that agents must learn, a real OSI open-source license.
 - **Settled while charting:**
-  - Name: **git-mates**. The binary is `git-mates`, so it runs as `git mates <cmd>`. Free on crates.io and Homebrew as of 2026-10-18.
+  - Name: **git-mates**. The binary is `git-mates`, so it runs as `git mates <cmd>`. Reserved on crates.io (placeholder 0.0.0, 2026-10-18); free on Homebrew.
+  - License: dual `MIT OR Apache-2.0`, as is conventional for Rust ([LICENSE-MIT](../../LICENSE-MIT), [LICENSE-APACHE](../../LICENSE-APACHE)).
   - Build a layer on plain git, not a new VCS ([ADR 0001](../../docs/adr/0001-layer-on-plain-git.md)).
   - Written in Rust; most of the code will be written by Claude.
   - v0 supports Claude Code only, designed so other agents can be added later.
@@ -44,7 +45,6 @@ A v0 spec, ready to start coding, for an open-source Rust layer on plain git. Th
 - **Install and CLI surface:** shipped as a Claude Code plugin, `cargo install`, or brew? How hooks get registered in a repo: the Claude Code hooks, plus the git hooks the workspace needs (`pre-commit`, `prepare-commit-msg`, `post-commit`, `pre-push`, `post-checkout`). They must live alongside an existing `core.hooksPath`, which the user's own global config sets, and chain with the repo's own hooks. Order matters: lint-staged, for example, stashes unstaged changes during pre-commit, and in a shared working directory those are other sessions' WIP.
 - **Performance budget** for hooks on large repos. A snapshot runs at every PreToolUse and PostToolUse of Edit, Write and Bash, and every commit runs pre-commit and post-commit under the layer lock.
 - **Translating an agent's history commands onto its session branch** (`git reset HEAD~1` as "undo my last commit", `rebase`, `merge`, `pull`). v0 blocks them.
-- **License:** MIT, or dual MIT/Apache-2.0 as is conventional for Rust. Leaning permissive; not yet confirmed.
 
 ## Out of scope
 
